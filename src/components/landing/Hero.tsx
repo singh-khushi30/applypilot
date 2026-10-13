@@ -41,7 +41,7 @@ export function Hero() {
             people, and preparing personalized outreach.
           </p>
           <div className="mt-8 flex flex-col gap-3 sm:flex-row">
-            <PrimaryLink href="#agent">Analyze a Job</PrimaryLink>
+            <PrimaryLink href="/app/new">Analyze a Job</PrimaryLink>
             <SecondaryLink href="#workflow">See how it works</SecondaryLink>
           </div>
           <ul className="mt-8 flex flex-wrap gap-2">

@@ -17,7 +17,7 @@ export function FinalCTA() {
               Give ApplyPilot a role and let the agent build the strategy.
             </p>
             <div className="mt-7">
-              <PrimaryLink href="#agent">Analyze your first job</PrimaryLink>
+              <PrimaryLink href="/app/new">Analyze your first job</PrimaryLink>
             </div>
           </div>
           <AccentCanvas />

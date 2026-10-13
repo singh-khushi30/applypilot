@@ -76,7 +76,7 @@ export function Navbar() {
             {open ? <X /> : <Menu />}
             <span className="sr-only">{open ? "Close menu" : "Open menu"}</span>
           </Button>
-          <PrimaryLink href="#agent" className="h-9 px-3.5 text-[13px] sm:h-10 sm:px-4 sm:text-sm">
+          <PrimaryLink href="/app/new" className="h-9 px-3.5 text-[13px] sm:h-10 sm:px-4 sm:text-sm">
             Try ApplyPilot
           </PrimaryLink>
         </div>

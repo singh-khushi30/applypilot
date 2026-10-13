@@ -1,4 +1,5 @@
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 const focus =
@@ -14,7 +15,7 @@ export function PrimaryLink({
   className?: string;
 }) {
   return (
-    <a
+    <Link
       href={href}
       className={cn(
         "inline-flex h-11 items-center justify-center gap-2 rounded-full bg-primary px-5 text-sm font-medium whitespace-nowrap text-primary-foreground shadow-[0_14px_30px_-18px_var(--violet)] transition duration-200 hover:bg-[#3f3456] motion-safe:hover:-translate-y-0.5",
@@ -23,7 +24,7 @@ export function PrimaryLink({
       )}
     >
       {children}
-    </a>
+    </Link>
   );
 }
 
@@ -37,7 +38,7 @@ export function SecondaryLink({
   className?: string;
 }) {
   return (
-    <a
+    <Link
       href={href}
       className={cn(
         "inline-flex h-11 items-center justify-center rounded-full border border-border bg-cream/80 px-5 text-sm font-medium whitespace-nowrap text-foreground transition duration-200 hover:bg-white",
@@ -46,6 +47,6 @@ export function SecondaryLink({
       )}
     >
       {children}
-    </a>
+    </Link>
   );
 }
