@@ -19,7 +19,6 @@ const valid = {
   gaps: [],
   domainAlignment: "limited",
   recommendation: {
-    verdict: "stretch",
     summary: "There is not enough evidence to call this a strong match.",
     nextSteps: ["Review the posting"],
   },
@@ -34,14 +33,15 @@ describe("structured output retry", () => {
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => {});
     const run = vi
       .fn()
-      .mockResolvedValueOnce({ ...valid, recommendation: { ...valid.recommendation, verdict: "nope" } })
+      .mockResolvedValueOnce({ ...valid, domainAlignment: "nope" })
       .mockResolvedValueOnce(valid);
 
     const result = await withStructuredRetry({ schema: analysisContentSchema, run });
 
-    expect(result.recommendation.verdict).toBe("stretch");
+    expect(result.value.domainAlignment).toBe("limited");
+    expect(result.attempts).toBe(2);
     expect(run).toHaveBeenCalledTimes(2);
-    expect(run.mock.calls[1]?.[0]).toContain("recommendation.verdict");
+    expect(run.mock.calls[1]?.[0]).toContain("domainAlignment");
     expect(run.mock.calls[1]?.[0]).toContain("invalid_value");
     expect(run.mock.calls[1]?.[0]).not.toContain(resumeSecret);
     expect(errorSpy.mock.calls[0]?.[0]).toContain("analysis_validation_failure");
@@ -65,7 +65,7 @@ describe("structured output retry", () => {
       .mockRejectedValueOnce(new ModelOutputValidationError("not json"))
       .mockResolvedValueOnce(valid);
 
-    await expect(withStructuredRetry({ schema: analysisContentSchema, run })).resolves.toEqual(valid);
+    await expect(withStructuredRetry({ schema: analysisContentSchema, run })).resolves.toEqual({ value: valid, attempts: 2 });
     expect(run.mock.calls[1]?.[0]).toContain("unparseable");
   });
 

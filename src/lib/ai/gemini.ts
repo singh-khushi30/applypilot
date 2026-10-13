@@ -9,7 +9,7 @@ import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
 export const GEMINI_MODEL = "gemini-2.5-flash";
 
-// Two attempts must fit inside the route's 60 second limit.
+// Per-request cap. The agent run also passes its own overall deadline.
 const ATTEMPT_TIMEOUT_MS = 25_000;
 
 function readStatus(error: unknown) {
@@ -57,6 +57,7 @@ export async function generateAnalysisContent(
   apiKey: string,
   prompt: string,
   correction: string | null,
+  signal?: AbortSignal,
 ): Promise<unknown> {
   const model = new ChatGoogleGenerativeAI({
     model: GEMINI_MODEL,
@@ -78,8 +79,9 @@ export async function generateAnalysisContent(
 
   let result: Awaited<ReturnType<typeof structured.invoke>>;
   try {
+    const timeout = AbortSignal.timeout(ATTEMPT_TIMEOUT_MS);
     result = await structured.invoke(messages, {
-      signal: AbortSignal.timeout(ATTEMPT_TIMEOUT_MS),
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
     });
   } catch (error) {
     throw mapProviderError(error);

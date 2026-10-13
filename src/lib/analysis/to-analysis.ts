@@ -1,20 +1,9 @@
-import { calculateMatch } from "@/lib/analysis/calculate-match";
 import type { AnalysisContent } from "@/lib/ai/schemas/analysis";
-import type { Analysis, SkillGap } from "@/types/domain";
-
-const REAL_TRACE: Analysis["trace"] = [
-  { id: "resume", label: "Resume extracted" },
-  { id: "requirements", label: "Requirements structured" },
-  { id: "evidence", label: "Evidence compared" },
-  { id: "fit", label: "Fit calculated" },
-  { id: "gaps", label: "Gaps identified" },
-  { id: "recommendation", label: "Recommendation prepared" },
-];
+import { skillKey } from "@/lib/analysis/calculate-match";
+import type { Analysis, MatchBreakdown, SkillGap, TraceEvent } from "@/types/domain";
 
 function requirementLine(content: AnalysisContent, skill: string) {
-  const match = content.requirements.find(
-    (item) => item.skill.trim().toLowerCase() === skill.trim().toLowerCase(),
-  );
+  const match = content.requirements.find((item) => skillKey(item.skill) === skillKey(skill));
   if (!match) return "Noted while comparing the role";
   const category = match.category === "required" ? "Required" : "Preferred";
   return `${category} · ${match.importance} importance`;
@@ -26,7 +15,7 @@ function alignmentsFrom(content: AnalysisContent): Analysis["alignments"] {
 
   for (const item of content.skillEvidence) {
     if (item.source !== "resume" || item.status === "missing") continue;
-    const key = item.skill.trim().toLowerCase();
+    const key = skillKey(item.skill);
     if (seen.has(key)) continue;
     seen.add(key);
     const evidence =
@@ -44,7 +33,7 @@ function gapsFrom(content: AnalysisContent): SkillGap[] {
   const gaps: SkillGap[] = [];
 
   for (const gap of content.gaps) {
-    const key = gap.skill.trim().toLowerCase();
+    const key = skillKey(gap.skill);
     if (seen.has(key)) continue;
     seen.add(key);
     gaps.push({
@@ -64,8 +53,15 @@ function specified(value: string | null | undefined, fallback: string) {
   return trimmed ? trimmed : fallback;
 }
 
+/**
+ * Builds the client-facing analysis from validated model content, the
+ * deterministic match result, and the agent trace. Input documents are not
+ * part of the output.
+ */
 export function toAnalysis(
   content: AnalysisContent,
+  match: MatchBreakdown,
+  trace: TraceEvent[],
   options: { id: string; company: string | null; roleTitle: string | null },
 ): Analysis {
   return {
@@ -78,11 +74,11 @@ export function toAnalysis(
       location: specified(content.job.location, "Not specified"),
       employmentType: specified(content.job.employmentType, "Not specified"),
     },
-    match: calculateMatch(content),
+    match,
     alignments: alignmentsFrom(content),
     gaps: gapsFrom(content),
     recommendation: content.recommendation.summary.trim(),
     nextSteps: content.recommendation.nextSteps.map((step) => step.trim()).slice(0, 6),
-    trace: REAL_TRACE,
+    trace,
   };
 }

@@ -12,7 +12,7 @@ export const storedAnalysisSchema = z.object({
   }),
   match: z.object({
     overall: z.number().int().min(0).max(100),
-    label: z.string().min(1).max(40),
+    label: z.enum(["Strong Match", "Potential Match", "Stretch"]),
     explanation: z.string().min(1).max(600),
     dimensions: z
       .array(
@@ -49,10 +49,15 @@ export const storedAnalysisSchema = z.object({
     .array(
       z.object({
         id: z.string().min(1).max(40),
+        node: z.string().min(1).max(40),
         label: z.string().min(1).max(80),
+        status: z.enum(["completed", "failed"]),
+        attempt: z.number().int().min(1).max(3),
+        durationMs: z.number().int().min(0).nullable(),
+        detail: z.string().max(120).nullable(),
       }),
     )
-    .max(8),
+    .max(12),
 });
 
 export type StoredAnalysis = z.infer<typeof storedAnalysisSchema>;

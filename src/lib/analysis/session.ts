@@ -1,6 +1,7 @@
 import { storedAnalysisSchema, type StoredAnalysis } from "@/lib/analysis/stored-analysis";
 
-export const ANALYSIS_SESSION_KEY = "applypilot.analysis.v1";
+// v2: trace events recorded by the agent graph.
+export const ANALYSIS_SESSION_KEY = "applypilot.analysis.v2";
 
 export function saveAnalysis(analysis: StoredAnalysis) {
   sessionStorage.setItem(ANALYSIS_SESSION_KEY, JSON.stringify(analysis));

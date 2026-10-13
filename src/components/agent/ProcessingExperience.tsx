@@ -8,6 +8,7 @@ const steps = [
   "Comparing evidence",
   "Identifying gaps",
   "Calculating fit",
+  "Checking analysis quality",
   "Preparing recommendation",
 ] as const;
 

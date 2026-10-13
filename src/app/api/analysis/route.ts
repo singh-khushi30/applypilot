@@ -1,6 +1,7 @@
 import { analyzeJobFit } from "@/lib/ai/analyze-job";
 import {
   AnalysisInputError,
+  AnalysisQualityError,
   AnalysisServiceError,
   ModelOutputValidationError,
   ResumeExtractionError,
@@ -81,6 +82,9 @@ export async function POST(request: Request) {
     if (error instanceof AnalysisInputError || error instanceof ResumeExtractionError) {
       const status = error instanceof ResumeExtractionError ? 422 : 400;
       return errorResponse(status, error.code, error.message);
+    }
+    if (error instanceof AnalysisQualityError) {
+      return errorResponse(502, error.code, analysisMessages.qualityFailed);
     }
     if (error instanceof ModelOutputValidationError) {
       console.error(JSON.stringify({ event: "analysis_failed", code: error.code }));

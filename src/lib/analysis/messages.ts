@@ -11,5 +11,7 @@ export const analysisMessages = {
     "Job URL extraction isn’t available yet. Paste the job description to run this analysis.",
   missingApiKey: "Add GEMINI_API_KEY to .env.local to run an analysis.",
   rateLimit: "ApplyPilot is busy right now. Please try again in a moment.",
-  generic: "ApplyPilot couldn’t complete the analysis right now. Please try again.",
+  qualityFailed:
+    "ApplyPilot couldn’t produce a reliable analysis for this role. Please try again.",
+  generic:"ApplyPilot couldn’t complete the analysis right now. Please try again.",
 } as const;

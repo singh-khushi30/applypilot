@@ -10,15 +10,19 @@ import type { ZodType } from "zod";
 const MAX_ATTEMPTS = 2;
 
 /**
- * Runs a model call and validates its output with Zod. An invalid or
- * unparseable response is retried once with only the failing schema paths
- * and codes. Provider errors are not retried here.
+ * Retry layer 1: structured-output retry.
+ *
+ * Runs one model request and validates its output with Zod. A malformed,
+ * unparseable, or schema-invalid response is retried once with only the
+ * failing schema paths and codes. Provider errors are not retried here, and
+ * schema-valid but inconsistent output is left to the agent evaluator
+ * (retry layer 2 in src/lib/agent).
  */
 export async function withStructuredRetry<T>(options: {
   schema: ZodType<T>;
   run: (correction: string | null) => Promise<unknown>;
   maxAttempts?: number;
-}): Promise<T> {
+}): Promise<{ value: T; attempts: number }> {
   const maxAttempts = Math.min(options.maxAttempts ?? MAX_ATTEMPTS, MAX_ATTEMPTS);
   let correction: string | null = null;
 
@@ -26,7 +30,7 @@ export async function withStructuredRetry<T>(options: {
     let issues: ValidationIssueMeta[];
     try {
       const parsed = options.schema.safeParse(await options.run(correction));
-      if (parsed.success) return parsed.data;
+      if (parsed.success) return { value: parsed.data, attempts: attempt };
       issues = validationIssueMetadata(parsed.error);
     } catch (error) {
       if (!(error instanceof ModelOutputValidationError)) throw error;

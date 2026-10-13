@@ -1,5 +1,5 @@
 import type { AnalysisContent } from "@/lib/ai/schemas/analysis";
-import type { MatchBreakdown } from "@/types/domain";
+import type { MatchBreakdown, MatchLabel } from "@/types/domain";
 
 const STATUS_WEIGHT = {
   strong: 1,
@@ -23,7 +23,7 @@ const WEIGHTS = {
 export const MATCH_EXPLANATION =
   "ApplyPilot weighs required skills most heavily, then resume evidence, preferred qualifications, and domain alignment. If a posting does not list one of those groups, that portion is left out and the remaining weights are scaled to 100%. The percentage is calculated from the structured comparison, not estimated by the model.";
 
-function skillKey(skill: string) {
+export function skillKey(skill: string) {
   return skill.trim().toLowerCase();
 }
 
@@ -62,7 +62,8 @@ function evidenceRatio(content: AnalysisContent) {
   return mean([...bySkill.values()]);
 }
 
-function labelFor(overall: number) {
+/** The only place a score becomes a match classification. */
+export function classifyMatch(overall: number): MatchLabel {
   if (overall >= 80) return "Strong Match";
   if (overall >= 60) return "Potential Match";
   return "Stretch";
@@ -108,7 +109,7 @@ export function calculateMatch(content: AnalysisContent): MatchBreakdown {
 
   return {
     overall,
-    label: labelFor(overall),
+    label: classifyMatch(overall),
     explanation: MATCH_EXPLANATION,
     dimensions: [
       {

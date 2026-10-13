@@ -22,7 +22,6 @@ const valid = {
   gaps: [{ skill: "Kubernetes", importance: "low", reason: "Not mentioned in the resume" }],
   domainAlignment: "strong",
   recommendation: {
-    verdict: "strong_match",
     summary: "The resume supports the core product engineering work.",
     nextSteps: ["Tailor the resume"],
   },
@@ -33,19 +32,27 @@ describe("analysisContentSchema", () => {
     expect(analysisContentSchema.safeParse(valid).success).toBe(true);
   });
 
-  it("rejects an unknown verdict and extra fields", () => {
-    const verdict = analysisContentSchema.safeParse({
+  it("rejects an unknown enum value and extra fields", () => {
+    const status = analysisContentSchema.safeParse({
       ...valid,
-      recommendation: { ...valid.recommendation, verdict: "perfect" },
+      skillEvidence: [{ ...valid.skillEvidence[0], status: "excellent" }],
     });
-    expect(verdict.success).toBe(false);
-    if (!verdict.success) {
-      expect(verdict.error.issues[0]?.path.join(".")).toBe("recommendation.verdict");
-      expect(verdict.error.issues[0]?.code).toBe("invalid_value");
+    expect(status.success).toBe(false);
+    if (!status.success) {
+      expect(status.error.issues[0]?.path.join(".")).toBe("skillEvidence.0.status");
+      expect(status.error.issues[0]?.code).toBe("invalid_value");
     }
 
     const extra = analysisContentSchema.safeParse({ ...valid, score: 90 });
     expect(extra.success).toBe(false);
+  });
+
+  it("does not accept a model verdict, so classification stays in scoring code", () => {
+    const parsed = analysisContentSchema.safeParse({
+      ...valid,
+      recommendation: { ...valid.recommendation, verdict: "strong_match" },
+    });
+    expect(parsed.success).toBe(false);
   });
 
   it("rejects empty strings where null is required", () => {

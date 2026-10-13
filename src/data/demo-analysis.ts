@@ -1,4 +1,8 @@
-import type { Analysis } from "@/types/domain";
+import type { Analysis, TraceEvent } from "@/types/domain";
+
+function demoStep(id: string, label: string): TraceEvent {
+  return { id, node: "demo", label, status: "completed", attempt: 1, durationMs: null, detail: null };
+}
 
 export const demoAnalysis: Analysis = {
   id: "demo-linear-swe",
@@ -57,12 +61,14 @@ export const demoAnalysis: Analysis = {
     "Prepare outreach",
     "Review before sending",
   ],
+  // Sample steps for the demo screen. Real runs use the trace recorded by the
+  // agent graph in src/lib/agent.
   trace: [
-    { id: "extract", label: "Job extracted" },
-    { id: "requirements", label: "Requirements structured" },
-    { id: "resume", label: "Resume parsed" },
-    { id: "skills", label: "Skills compared" },
-    { id: "fit", label: "Fit calculated" },
-    { id: "gaps", label: "Gaps identified" },
+    demoStep("resume", "Resume text received"),
+    demoStep("requirements", "Job requirements structured"),
+    demoStep("evidence", "Candidate evidence compared"),
+    demoStep("score", "Match score calculated"),
+    demoStep("quality", "Analysis quality checked"),
+    demoStep("recommendation", "Recommendation prepared"),
   ],
 };

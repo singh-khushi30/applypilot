@@ -1,4 +1,6 @@
-const DOCUMENT_TAGS = ["JOB_DESCRIPTION", "RESUME"] as const;
+import type { AnalysisContent } from "@/lib/ai/schemas/analysis";
+
+const DOCUMENT_TAGS = ["JOB_DESCRIPTION", "RESUME", "PREVIOUS_ANALYSIS"] as const;
 
 export const ANALYSIS_SYSTEM_PROMPT = `You compare one job description with one resume and return structured fit data.
 
@@ -9,11 +11,13 @@ Rules:
 - Mark a skill strong only when the resume clearly demonstrates it.
 - Mark a skill partial when the resume shows related experience but does not clearly demonstrate the skill.
 - Mark a skill missing when the resume does not support it. Do not guess.
-- Label requirements required or preferred from the job description. If the posting is ambiguous, use preferred.
+- Label requirements required or preferred from the job description. If the posting is ambiguous, use preferred. List each skill once.
+- Add one skillEvidence entry for every requirement, using exactly the same skill name.
+- List every missing high-importance required skill in gaps. Never list a skill as a gap when it is marked strong.
 - Evidence must be a short phrase grounded in the resume. Use null when status is missing.
 - Use source "resume" when the note comes from the resume. Use "job_description" when you are describing a requirement the resume does not support.
 - domainAlignment is strong, partial, or limited, based only on whether the resume's work is in the same kind of role. Do not output a number.
-- Do not output match percentages, scores, or chain-of-thought.
+- Do not output match percentages, scores, verdicts, or chain-of-thought.
 - Use null for unknown company, location, or employment type. Do not use empty strings.
 - Return only the structured fields.`;
 
@@ -46,6 +50,33 @@ ${fenceDocument(input.jobDescription)}
 <RESUME>
 ${fenceDocument(input.resumeText)}
 </RESUME>`;
+}
+
+/**
+ * Prompt for the agent's corrective pass (retry layer 2). It carries the
+ * documents for grounding, the previous structured analysis, and the
+ * evaluator's issue codes. It does not repeat the original request unchanged.
+ */
+export function buildCorrectiveAnalysisPrompt(
+  input: Parameters<typeof buildAnalysisPrompt>[0],
+  previous: AnalysisContent,
+  issues: Array<{ code: string; path: string; message: string }>,
+) {
+  const lines = issues.slice(0, 12).map((issue) => `- ${issue.code} at ${issue.path}: ${issue.message}`);
+
+  return `${buildAnalysisPrompt(input)}
+
+<PREVIOUS_ANALYSIS>
+${fenceDocument(JSON.stringify(previous))}
+</PREVIOUS_ANALYSIS>
+
+The previous analysis passed schema validation but failed these consistency checks:
+${lines.join("\n")}
+
+Return the complete corrected analysis.
+- Correct only the fields involved in the issues above. Keep every other field as it was.
+- Stay grounded in RESUME. If the resume does not support a skill, mark it missing instead of inventing evidence.
+- Do not include reasoning, scores, or verdicts.`;
 }
 
 export function buildCorrectionPrompt(issues: Array<{ path: string; code: string }>) {

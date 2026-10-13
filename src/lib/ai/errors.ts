@@ -33,6 +33,26 @@ export class ModelOutputValidationError extends Error {
   }
 }
 
+/** A schema-valid analysis still failed evaluation after the corrective pass. */
+export class AnalysisQualityError extends Error {
+  readonly code = "evaluation_failed";
+
+  constructor(message: string) {
+    super(message);
+    this.name = "AnalysisQualityError";
+  }
+}
+
+/** A graph node ran without the state it needs. This is a wiring bug. */
+export class AgentStateError extends Error {
+  readonly code = "agent_state_invalid";
+
+  constructor(node: string) {
+    super(`Agent node ${node} ran without required state.`);
+    this.name = "AgentStateError";
+  }
+}
+
 export class AnalysisServiceError extends Error {
   readonly code: "missing_api_key" | "rate_limit" | "unavailable" | "generic";
 

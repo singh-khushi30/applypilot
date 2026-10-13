@@ -1,19 +1,18 @@
+import "server-only";
+
+import { runAnalysisGraph } from "@/lib/agent/analysis-graph";
+import type { AnalysisInput } from "@/lib/agent/state";
 import { AnalysisServiceError } from "@/lib/ai/errors";
 import { generateAnalysisContent } from "@/lib/ai/gemini";
-import { buildAnalysisPrompt } from "@/lib/ai/prompts/analysis";
-import { analysisContentSchema } from "@/lib/ai/schemas/analysis";
-import { withStructuredRetry } from "@/lib/ai/structured-output";
 import { logValidationFailure, validationIssueMetadata } from "@/lib/ai/validation-log";
 import { analysisMessages } from "@/lib/analysis/messages";
 import { storedAnalysisSchema } from "@/lib/analysis/stored-analysis";
-import { toAnalysis } from "@/lib/analysis/to-analysis";
 
-export async function analyzeJobFit(input: {
-  jobDescription: string;
-  resumeText: string;
-  company: string | null;
-  roleTitle: string | null;
-}) {
+// Overall budget for every model call in one run, inside the route's 60s limit.
+const RUN_BUDGET_MS = 55_000;
+
+/** Server entry point: wires Gemini into the agent graph and checks the result. */
+export async function analyzeJobFit(input: AnalysisInput) {
   const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     const development = process.env.NODE_ENV !== "production";
@@ -23,16 +22,22 @@ export async function analyzeJobFit(input: {
     );
   }
 
-  const prompt = buildAnalysisPrompt(input);
-  const content = await withStructuredRetry({
-    schema: analysisContentSchema,
-    run: (correction) => generateAnalysisContent(apiKey, prompt, correction),
-  });
-  const analysis = toAnalysis(content, {
-    id: crypto.randomUUID(),
-    company: input.company,
-    roleTitle: input.roleTitle,
-  });
+  const signal = AbortSignal.timeout(RUN_BUDGET_MS);
+  let analysis;
+  try {
+    analysis = await runAnalysisGraph(input, {
+      model: (prompt, correction, callSignal) =>
+        generateAnalysisContent(apiKey, prompt, correction, callSignal),
+      signal,
+    });
+  } catch (error) {
+    // LangGraph throws its own abort error between nodes once the budget is spent.
+    if (signal.aborted && !(error instanceof AnalysisServiceError)) {
+      throw new AnalysisServiceError("unavailable", analysisMessages.generic);
+    }
+    throw error;
+  }
+
   const stored = storedAnalysisSchema.safeParse(analysis);
   if (!stored.success) {
     logValidationFailure(0, validationIssueMetadata(stored.error));

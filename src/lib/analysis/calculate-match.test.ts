@@ -1,4 +1,4 @@
-import { calculateMatch } from "@/lib/analysis/calculate-match";
+import { calculateMatch, classifyMatch } from "@/lib/analysis/calculate-match";
 import type { AnalysisContent } from "@/lib/ai/schemas/analysis";
 import { describe, expect, it } from "vitest";
 
@@ -16,7 +16,6 @@ function content(patch: Partial<AnalysisContent> = {}): AnalysisContent {
     gaps: [],
     domainAlignment: "strong",
     recommendation: {
-      verdict: "strong_match",
       summary: "Enough overlap to apply.",
       nextSteps: ["Tailor the resume"],
     },
@@ -121,6 +120,15 @@ describe("calculateMatch", () => {
     const match = calculateMatch(content({ domainAlignment: "limited" }));
     expect(match.overall).toBe(0);
     expect(match.dimensions.every((item) => item.omitted)).toBe(true);
+  });
+
+  it("classifies scores only by the fixed thresholds", () => {
+    expect(classifyMatch(100)).toBe("Strong Match");
+    expect(classifyMatch(80)).toBe("Strong Match");
+    expect(classifyMatch(79)).toBe("Potential Match");
+    expect(classifyMatch(60)).toBe("Potential Match");
+    expect(classifyMatch(59)).toBe("Stretch");
+    expect(classifyMatch(0)).toBe("Stretch");
   });
 
   it("is deterministic", () => {

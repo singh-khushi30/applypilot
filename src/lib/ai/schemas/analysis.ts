@@ -36,8 +36,9 @@ export const analysisContentSchema = z
     skillEvidence: z.array(skillEvidenceSchema).max(40),
     gaps: z.array(gapSchema).max(12),
     domainAlignment: z.enum(["strong", "partial", "limited"]),
+    // No verdict or score here. The match classification comes only from
+    // calculateMatch.
     recommendation: z.strictObject({
-      verdict: z.enum(["strong_match", "potential_match", "stretch"]),
       summary: z.string().trim().min(1).max(800),
       nextSteps: z.array(z.string().trim().min(1).max(160)).min(1).max(6),
     }),

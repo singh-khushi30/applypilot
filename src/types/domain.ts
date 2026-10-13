@@ -28,7 +28,7 @@ export type BreakdownDimension = {
 
 export type MatchBreakdown = {
   overall: number;
-  label: string;
+  label: MatchLabel;
   dimensions: BreakdownDimension[];
   explanation: string;
 };
@@ -50,6 +50,23 @@ export type AgentStep = {
   status: AgentStepStatus;
 };
 
+export type MatchLabel = "Strong Match" | "Potential Match" | "Stretch";
+
+/**
+ * One client-visible step from an agent run. Labels and details are written
+ * by application code from counts and node names, never from model text,
+ * prompts, or document content.
+ */
+export type TraceEvent = {
+  id: string;
+  node: string;
+  label: string;
+  status: "completed" | "failed";
+  attempt: number;
+  durationMs: number | null;
+  detail: string | null;
+};
+
 export type Analysis = {
   id: string;
   demo: boolean;
@@ -65,7 +82,7 @@ export type Analysis = {
   gaps: SkillGap[];
   recommendation: string;
   nextSteps: string[];
-  trace: Array<Pick<AgentStep, "id" | "label">>;
+  trace: TraceEvent[];
 };
 
 export type ApplicationStage = "saved" | "ready" | "applied" | "interview";
