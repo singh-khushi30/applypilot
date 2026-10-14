@@ -2,12 +2,14 @@ import "server-only";
 
 import { AnalysisServiceError, ModelOutputValidationError } from "@/lib/ai/errors";
 import { ANALYSIS_SYSTEM_PROMPT } from "@/lib/ai/prompts/analysis";
+import { OUTREACH_SYSTEM_PROMPT } from "@/lib/ai/prompts/outreach";
 import { analysisContentSchema } from "@/lib/ai/schemas/analysis";
+import { outreachContentSchema } from "@/lib/ai/schemas/outreach";
 import { analysisMessages } from "@/lib/analysis/messages";
 import { HumanMessage, SystemMessage } from "@langchain/core/messages";
 import { ChatGoogleGenerativeAI } from "@langchain/google-genai";
 
-export const GEMINI_MODEL = "gemini-2.5-flash";
+export const GEMINI_MODEL = "gemini-3.8-flash";
 
 // Per-request cap. The agent run also passes its own overall deadline.
 const ATTEMPT_TIMEOUT_MS = 25_000;
@@ -75,6 +77,45 @@ export async function generateAnalysisContent(
     includeRaw: true,
   });
   const messages = [new SystemMessage(ANALYSIS_SYSTEM_PROMPT), new HumanMessage(prompt)];
+  if (correction) messages.push(new HumanMessage(correction));
+
+  let result: Awaited<ReturnType<typeof structured.invoke>>;
+  try {
+    const timeout = AbortSignal.timeout(ATTEMPT_TIMEOUT_MS);
+    result = await structured.invoke(messages, {
+      signal: signal ? AbortSignal.any([signal, timeout]) : timeout,
+    });
+  } catch (error) {
+    throw mapProviderError(error);
+  }
+
+  if (result.parsed) return result.parsed;
+  return parseJsonText(result.raw.text);
+}
+
+/** Outreach draft. The caller validates the JSON with the outreach Zod schema. */
+export async function generateOutreachContent(
+  apiKey: string,
+  prompt: string,
+  correction: string | null,
+  signal?: AbortSignal,
+): Promise<unknown> {
+  const model = new ChatGoogleGenerativeAI({
+    model: GEMINI_MODEL,
+    apiKey,
+    temperature: 0,
+    maxOutputTokens: 2048,
+    maxRetries: 1,
+    thinkingConfig: {
+      includeThoughts: false,
+      thinkingBudget: 0,
+    },
+  });
+  const structured = model.withStructuredOutput(outreachContentSchema, {
+    name: "outreach_draft",
+    includeRaw: true,
+  });
+  const messages = [new SystemMessage(OUTREACH_SYSTEM_PROMPT), new HumanMessage(prompt)];
   if (correction) messages.push(new HumanMessage(correction));
 
   let result: Awaited<ReturnType<typeof structured.invoke>>;

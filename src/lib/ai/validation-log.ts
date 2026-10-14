@@ -19,10 +19,14 @@ export function validationIssueMetadata(error: { issues?: IssueLike[] }): Valida
   });
 }
 
-export function logValidationFailure(attempt: number, issues: ValidationIssueMeta[]) {
+export function logValidationFailure(
+  attempt: number,
+  issues: ValidationIssueMeta[],
+  event = "analysis_validation_failure",
+) {
   console.error(
     JSON.stringify({
-      event: "analysis_validation_failure",
+      event,
       attempt,
       issues,
     }),

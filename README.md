@@ -61,7 +61,35 @@ The result's Agent run section shows the trace recorded by the graph as it ran: 
 
 Server logs are structured JSON with only the event, node, status, attempt, duration, error code, and evaluator issue codes. They never include the resume, the job description, prompts, model output, or the API key.
 
-Contact research, outreach, Supabase, and authentication are not built yet. Job URL extraction and OCR are not implemented. `/app/analysis/demo` is a separate sample screen and is never used as a fallback for a failed analysis.
+Job URL extraction, OCR, contact scraping, Supabase, and authentication are not built yet. `/app/analysis/demo` is a separate sample screen and is never used as a fallback for a failed analysis.
+
+## Outreach flow
+
+From a real analysis, Find relevant people opens contacts for that role. ApplyPilot does not look people up and does not send messages.
+
+```text
+Analysis + selected contact
+        ↓
+Context validation
+        ↓
+Gemini grounded draft
+        ↓
+Zod validation + bounded retry
+        ↓
+LangGraph interrupt (awaiting human review)
+        ↓
+Edit / Approve / Reject
+```
+
+- Example contacts are fictional and labeled Demo. A profile URL is stored only as something you typed. It is not fetched.
+- Relevance (Hiring Manager, Recruiter / Talent, Engineering Leader, Potential Teammate, Low Relevance) is a deterministic title and company classification. It does not claim someone owns the opening.
+- The draft may use only the strengths and role lines already on the analysis. Gemini does not score the person and does not see the raw resume.
+- Schema-invalid or ungrounded output is retried once. The second prompt lists failing paths and codes only.
+- The outreach graph pauses with LangGraph `interrupt` before any approval node. Tests resume that pause with a `MemorySaver`. The API creates that saver for a single generation request and then drops it.
+- Edit, approve, and reject in the product are explicit transitions in `src/lib/outreach/review.ts`, stored in this browser session. A draft cannot become approved without Approve. Regenerating returns it to awaiting review.
+- Durable cross-request resume of a paused graph needs a persistent checkpointer. That is not built. Restarting the server drops in-memory checkpoints. The session store is the review record until Supabase exists.
+
+ApplyPilot does not automatically send outreach. Human approval is required, and approval still does not send the message.
 
 ## Tech stack
 
@@ -69,7 +97,7 @@ Contact research, outreach, Supabase, and authentication are not built yet. Job 
 - Tailwind CSS and shadcn/ui
 - Motion, Lucide React, and Recharts
 - Three.js, React Three Fiber, and Drei
-- LangGraph.js, LangChain, and Google Gemini
+- LangGraph.js, LangChain, and Google Gemini (`gemini-3.8-flash`)
 - Supabase
 - Zod and React Hook Form
 

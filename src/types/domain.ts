@@ -109,3 +109,30 @@ export type WorkspaceStat = {
   label: string;
   value: string;
 };
+
+export type ContactSource = "demo" | "manual";
+
+export type ContactRelevance =
+  | "hiring_manager"
+  | "recruiter"
+  | "engineering_leader"
+  | "potential_teammate"
+  | "low_relevance";
+
+/** A person the user is considering. Demo entries are examples, not lookup results. */
+export type Contact = {
+  id: string;
+  source: ContactSource;
+  name: string;
+  title: string;
+  company: string;
+  context: string | null;
+  /** User-typed URL. ApplyPilot does not fetch it. */
+  profileUrl: string | null;
+  relevance: ContactRelevance;
+  relevanceReason: string;
+};
+
+export type OutreachChannel = "linkedin" | "email";
+
+export type OutreachReviewStatus = "awaiting_review" | "approved" | "rejected";

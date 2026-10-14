@@ -43,6 +43,26 @@ export class AnalysisQualityError extends Error {
   }
 }
 
+export class OutreachInputError extends Error {
+  readonly code: "invalid_contact" | "invalid_context" | "invalid_request";
+
+  constructor(code: OutreachInputError["code"], message: string) {
+    super(message);
+    this.name = "OutreachInputError";
+    this.code = code;
+  }
+}
+
+/** An outreach review action is not allowed from the current status. */
+export class OutreachStateError extends Error {
+  readonly code = "invalid_transition";
+
+  constructor() {
+    super("That outreach review action is not available.");
+    this.name = "OutreachStateError";
+  }
+}
+
 /** A graph node ran without the state it needs. This is a wiring bug. */
 export class AgentStateError extends Error {
   readonly code = "agent_state_invalid";

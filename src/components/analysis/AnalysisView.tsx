@@ -1,8 +1,9 @@
 import { AgentTrace } from "@/components/analysis/AgentTrace";
 import { MatchScore } from "@/components/analysis/MatchScore";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import type { Analysis, GapImportance } from "@/types/domain";
 import { cn } from "@/lib/utils";
+import Link from "next/link";
 
 const importanceCopy: Record<GapImportance, string> = {
   high: "High",
@@ -156,9 +157,26 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
           <Button type="button" className="h-11 rounded-full px-5">
             Tailor my resume
           </Button>
-          <Button type="button" variant="outline" className="h-11 rounded-full bg-cream px-5">
-            Find relevant people
-          </Button>
+          {analysis.demo ? (
+            <Button
+              type="button"
+              variant="outline"
+              className="h-11 rounded-full bg-cream px-5"
+              disabled
+            >
+              Find relevant people
+            </Button>
+          ) : (
+            <Link
+              href="/app/contacts"
+              className={buttonVariants({
+                variant: "outline",
+                className: "h-11 rounded-full bg-cream px-5",
+              })}
+            >
+              Find relevant people
+            </Link>
+          )}
         </div>
       </section>
 
