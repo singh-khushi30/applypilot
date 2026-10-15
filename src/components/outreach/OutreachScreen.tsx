@@ -5,7 +5,9 @@ import { PrimaryLink } from "@/components/landing/links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { parseStoredAnalysis, readAnalysisSnapshot } from "@/lib/analysis/session";
+import { parseSessionAnalysis, readAnalysisSnapshot } from "@/lib/analysis/session";
+import type { StoredAnalysis } from "@/lib/analysis/stored-analysis";
+import type { SavedOutreach } from "@/lib/persistence/records";
 import { outreachContentSchema, type OutreachContent } from "@/lib/ai/schemas/outreach";
 import { demoContacts } from "@/lib/outreach/demo-contacts";
 import { outreachMessages } from "@/lib/outreach/messages";
@@ -26,7 +28,7 @@ import {
 } from "@/lib/outreach/session";
 import { cn } from "@/lib/utils";
 import type { Contact, OutreachChannel, TraceEvent } from "@/types/domain";
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore } from "react";
 
 const PENDING = "\0pending";
@@ -46,9 +48,25 @@ function findContact(contacts: Contact[], id: string) {
   return contacts.find((contact) => contact.id === id) ?? null;
 }
 
-export function OutreachScreen() {
+export function OutreachScreen({
+  persisted,
+  applicationId,
+  analysis: savedAnalysis,
+  contacts,
+  outreach,
+  notice,
+}: {
+  persisted: boolean;
+  applicationId: string;
+  analysis: StoredAnalysis | null;
+  contacts: Contact[];
+  outreach: SavedOutreach | null;
+  notice: string | null;
+}) {
+  const router = useRouter();
   const params = useSearchParams();
   const contactId = params.get("contact") ?? "";
+  const [override, setOverride] = useState<SavedOutreach | null>(null);
   const analysisRaw = useSyncExternalStore(subscribeAnalysis, readAnalysisSnapshot, () => PENDING);
   const outreachRaw = useSyncExternalStore(subscribeOutreach, readOutreachSnapshot, () => PENDING);
   const [channelChoice, setChannelChoice] = useState<OutreachChannel | null>(null);
@@ -57,19 +75,33 @@ export function OutreachScreen() {
   const [error, setError] = useState<string | null>(null);
   const [pending, setPending] = useState(false);
 
-  const analysis = analysisRaw === PENDING ? null : parseStoredAnalysis(analysisRaw);
+  const sessionRecord = analysisRaw === PENDING ? null : parseSessionAnalysis(analysisRaw);
+  const sessionAnalysis =
+    !persisted && sessionRecord && (!applicationId || sessionRecord.analysis.id === applicationId)
+      ? sessionRecord.analysis
+      : null;
+  const analysis = savedAnalysis ?? sessionAnalysis;
   const session = useMemo(() => {
     if (!analysis || outreachRaw === PENDING) return null;
     return parseOutreachSession(outreachRaw, analysis.id);
   }, [analysis, outreachRaw]);
 
   const contact = useMemo(() => {
-    if (!analysis || !session) return null;
-    return findContact([...demoContacts(analysis.job), ...session.manualContacts], contactId);
-  }, [analysis, session, contactId]);
+    if (!analysis) return null;
+    return findContact(
+      [...demoContacts(analysis.job), ...contacts, ...(session?.manualContacts ?? [])],
+      contactId,
+    );
+  }, [analysis, contacts, session, contactId]);
 
-  const stored = session?.review?.contactId === contactId ? session.review : null;
-  const review = stored ? reviewFromStored(stored) : null;
+  const stored = persisted
+    ? null
+    : session?.review?.contactId === contactId
+      ? session.review
+      : null;
+  const savedReview =
+    override ?? (outreach && contact && outreach.contactId === contact.id ? outreach : null);
+  const review = savedReview ?? (stored ? reviewFromStored(stored) : null);
   const channel = channelChoice ?? review?.channel ?? "linkedin";
   const draftMessage = message ?? review?.message ?? "";
   const draftSubject = subject ?? review?.subject ?? "";
@@ -132,11 +164,14 @@ export function OutreachScreen() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           channel,
+          applicationId: persisted ? applicationId : null,
           contact: {
             name: contact!.name,
             title: contact!.title,
             company: contact!.company,
             context: contact!.context,
+            profileUrl: contact!.profileUrl,
+            source: contact!.source,
             relevance: contact!.relevance,
           },
           analysis: {
@@ -149,6 +184,9 @@ export function OutreachScreen() {
       const body = (await response.json()) as {
         draft?: OutreachContent;
         trace?: TraceEvent[];
+        persisted?: boolean;
+        contact?: Contact;
+        outreach?: SavedOutreach;
         error?: { message?: string };
       };
       if (!response.ok || !body.draft || !body.trace) {
@@ -160,11 +198,22 @@ export function OutreachScreen() {
         setError(outreachMessages.invalidOutput);
         return;
       }
+      if (body.persisted && body.outreach && body.contact) {
+        setOverride(body.outreach);
+        setChannelChoice(null);
+        setMessage(null);
+        setSubject(null);
+        router.replace(
+          `/app/outreach?application=${applicationId}&contact=${encodeURIComponent(body.contact.id)}`,
+        );
+        router.refresh();
+        return;
+      }
       const next =
         kind === "regenerate" && review
           ? applyReviewAction(review, { type: "regenerate", content: parsed.data, trace: body.trace })
           : createAwaitingReview(parsed.data, body.trace);
-      persist({ ...session!, review: storedReview(contact!.id, next) });
+      if (session) persist({ ...session, review: storedReview(contact!.id, next) });
       setChannelChoice(null);
       setMessage(null);
       setSubject(null);
@@ -175,13 +224,61 @@ export function OutreachScreen() {
     }
   }
 
-  function decide(action: "approve" | "reject") {
+  async function decide(action: "approve" | "reject") {
     if (!review) return;
     setError(null);
+    if (persisted && "id" in review) {
+      const saved = review as SavedOutreach;
+      setPending(true);
+      try {
+        const nextMessage = (message ?? saved.message).trim();
+        const nextSubject = activeChannel === "email" ? (subject ?? saved.subject ?? "").trim() : null;
+        let current = saved;
+        if (nextMessage !== saved.message || nextSubject !== saved.subject) {
+          const edited = await fetch(`/api/outreach/${saved.id}`, {
+            method: "PATCH",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ type: "edit", message: nextMessage, subject: nextSubject }),
+          });
+          const editedBody = (await edited.json().catch(() => null)) as {
+            outreach?: SavedOutreach;
+            error?: { message?: string };
+          } | null;
+          if (!edited.ok || !editedBody?.outreach) {
+            setError(editedBody?.error?.message ?? "ApplyPilot couldn’t update this draft. Refresh and try again.");
+            return;
+          }
+          current = editedBody.outreach;
+        }
+        const response = await fetch(`/api/outreach/${current.id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ type: action }),
+        });
+        const body = (await response.json().catch(() => null)) as {
+          outreach?: SavedOutreach;
+          error?: { message?: string };
+        } | null;
+        if (!response.ok || !body?.outreach) {
+          setOverride(current);
+          setError(body?.error?.message ?? "ApplyPilot couldn’t update this draft. Refresh and try again.");
+          return;
+        }
+        setOverride(body.outreach);
+        setMessage(null);
+        setSubject(null);
+        router.refresh();
+      } catch {
+        setError("ApplyPilot couldn’t update this draft. Refresh and try again.");
+      } finally {
+        setPending(false);
+      }
+      return;
+    }
     try {
       const current = commitEdit(review);
       const next = applyReviewAction(current, { type: action });
-      persist({ ...session!, review: storedReview(contact!.id, next) });
+      if (session) persist({ ...session, review: storedReview(contact!.id, next) });
       setMessage(null);
       setSubject(null);
     } catch {
@@ -198,6 +295,7 @@ export function OutreachScreen() {
           {contact.source === "demo" ? "Demo contact · " : "Added by you · "}
           {analysis.job.title} at {analysis.job.company}
         </p>
+        {notice ? <p className="mt-3 max-w-2xl text-sm text-muted-foreground">{notice}</p> : null}
         <h1 className="mt-1 font-heading text-4xl tracking-tight sm:text-5xl">{contact.name}</h1>
         <p className="mt-2 text-sm text-muted-foreground">
           {contact.title}

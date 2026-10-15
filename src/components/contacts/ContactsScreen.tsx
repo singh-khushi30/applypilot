@@ -4,7 +4,8 @@ import { PrimaryLink } from "@/components/landing/links";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { parseStoredAnalysis, readAnalysisSnapshot } from "@/lib/analysis/session";
+import { parseSessionAnalysis, readAnalysisSnapshot } from "@/lib/analysis/session";
+import type { StoredAnalysis } from "@/lib/analysis/stored-analysis";
 import { demoContacts } from "@/lib/outreach/demo-contacts";
 import { outreachMessages } from "@/lib/outreach/messages";
 import { classifyContact, relevanceLabels } from "@/lib/outreach/relevance";
@@ -17,7 +18,16 @@ import {
 } from "@/lib/outreach/session";
 import type { Contact } from "@/types/domain";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMemo, useState, useSyncExternalStore, type FormEvent } from "react";
+
+type ContactsProps = {
+  persisted: boolean;
+  applicationId: string;
+  analysis: StoredAnalysis | null;
+  contacts: Contact[];
+  notice: string | null;
+};
 
 const PENDING = "\0pending";
 
@@ -38,7 +48,7 @@ function optionalProfileUrl(value: string) {
   }
 }
 
-function ContactCard({ contact }: { contact: Contact }) {
+function ContactCard({ contact, applicationId }: { contact: Contact; applicationId: string }) {
   return (
     <li className="rounded-[1.5rem] border border-border bg-card p-5">
       <div className="flex flex-wrap items-center gap-2">
@@ -67,7 +77,7 @@ function ContactCard({ contact }: { contact: Contact }) {
       ) : null}
       <div className="mt-5">
         <Link
-          href={`/app/outreach?contact=${encodeURIComponent(contact.id)}`}
+          href={`/app/outreach?application=${encodeURIComponent(applicationId)}&contact=${encodeURIComponent(contact.id)}`}
           className="inline-flex h-10 items-center rounded-full bg-primary px-4 text-sm font-medium text-primary-foreground"
         >
           Draft outreach
@@ -77,7 +87,14 @@ function ContactCard({ contact }: { contact: Contact }) {
   );
 }
 
-export function ContactsScreen() {
+export function ContactsScreen({
+  persisted,
+  applicationId,
+  analysis: savedAnalysis,
+  contacts,
+  notice,
+}: ContactsProps) {
+  const router = useRouter();
   const analysisRaw = useSyncExternalStore(subscribeAnalysis, readAnalysisSnapshot, () => PENDING);
   const outreachRaw = useSyncExternalStore(subscribeOutreach, readOutreachSnapshot, () => PENDING);
   const [name, setName] = useState("");
@@ -87,23 +104,31 @@ export function ContactsScreen() {
   const [profileUrl, setProfileUrl] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
 
-  const analysis = analysisRaw === PENDING ? null : parseStoredAnalysis(analysisRaw);
+  const sessionRecord = analysisRaw === PENDING ? null : parseSessionAnalysis(analysisRaw);
+  const sessionAnalysis =
+    !persisted && sessionRecord && (!applicationId || sessionRecord.analysis.id === applicationId)
+      ? sessionRecord.analysis
+      : null;
+  const analysis = savedAnalysis ?? sessionAnalysis;
   const session = useMemo(() => {
-    if (!analysis) return null;
+    if (!analysis || persisted) return null;
     if (outreachRaw === PENDING) return emptyOutreachSession(analysis.id);
     return parseOutreachSession(outreachRaw, analysis.id);
-  }, [analysis, outreachRaw]);
+  }, [analysis, outreachRaw, persisted]);
+  const manualContacts = persisted
+    ? contacts.filter((contact) => contact.source === "manual")
+    : (session?.manualContacts ?? []);
 
-  if (analysisRaw === PENDING || outreachRaw === PENDING) {
+  if (!persisted && (analysisRaw === PENDING || outreachRaw === PENDING)) {
     return <p className="text-sm text-muted-foreground">Loading contacts…</p>;
   }
 
-  if (!analysis || !session) {
+  if (!analysis) {
     return (
       <div className="max-w-xl">
         <h1 className="font-heading text-4xl tracking-tight sm:text-5xl">Contacts</h1>
         <p className="mt-4 text-base leading-7 text-muted-foreground">
-          Analyze a job first. ApplyPilot can then help you draft outreach for people you choose.
+          {notice ?? "Analyze a job first. ApplyPilot can then help you draft outreach for people you choose."}
         </p>
         <div className="mt-8">
           <PrimaryLink href="/app/new">Analyze a job</PrimaryLink>
@@ -144,9 +169,38 @@ export function ContactsScreen() {
       profileUrl: url,
       ...relevance,
     };
+    if (persisted) {
+      void fetch(`/api/applications/${applicationId}/contacts`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: contact.name,
+          title: contact.title,
+          company: contact.company,
+          context: contact.context,
+          profileUrl: contact.profileUrl,
+          source: "manual",
+        }),
+      }).then(async (response) => {
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+          setFormError(payload?.error?.message ?? "ApplyPilot couldn’t save this person.");
+          return;
+        }
+        setName("");
+        setTitle("");
+        setCompany("");
+        setContext("");
+        setProfileUrl("");
+        setFormError(null);
+        router.refresh();
+      });
+      return;
+    }
+    if (!session) return;
     saveOutreachSession({
-      ...session!,
-      manualContacts: [...session!.manualContacts, contact].slice(0, 20),
+      ...session,
+      manualContacts: [...session.manualContacts, contact].slice(0, 20),
     });
     setName("");
     setTitle("");
@@ -162,8 +216,11 @@ export function ContactsScreen() {
         <p className="text-sm text-muted-foreground">{analysis.job.company}</p>
         <h1 className="mt-1 font-heading text-4xl tracking-tight sm:text-5xl">Contacts</h1>
         <p className="mt-3 max-w-2xl text-base leading-7 text-muted-foreground">
-          People for the {analysis.job.title} role. Example contacts are fictional. Anyone you add
-          is stored only in this browser session. ApplyPilot does not look people up.
+          People for the {analysis.job.title} role. Example contacts are fictional. ApplyPilot does
+          not look people up.
+          {persisted
+            ? " People you add are saved with this application."
+            : " This browser session is keeping them until Supabase is configured."}
         </p>
       </div>
 
@@ -174,7 +231,7 @@ export function ContactsScreen() {
         </p>
         <ul className="mt-5 grid gap-3 lg:grid-cols-3">
           {examples.map((contact) => (
-            <ContactCard key={contact.id} contact={contact} />
+            <ContactCard key={contact.id} contact={contact} applicationId={analysis.id} />
           ))}
         </ul>
       </section>
@@ -231,12 +288,15 @@ export function ContactsScreen() {
 
       <section>
         <h2 className="font-heading text-3xl tracking-tight">People you added</h2>
-        {session.manualContacts.length === 0 ? (
-          <p className="mt-3 text-sm text-muted-foreground">No one added in this session yet.</p>
+        {notice ? <p className="mt-3 text-sm text-muted-foreground">{notice}</p> : null}
+        {manualContacts.length === 0 ? (
+          <p className="mt-3 text-sm text-muted-foreground">
+            {persisted ? "No one saved for this application yet." : "No one added in this session yet."}
+          </p>
         ) : (
           <ul className="mt-5 grid gap-3 lg:grid-cols-2">
-            {session.manualContacts.map((contact) => (
-              <ContactCard key={contact.id} contact={contact} />
+            {manualContacts.map((contact) => (
+              <ContactCard key={contact.id} contact={contact} applicationId={analysis.id} />
             ))}
           </ul>
         )}

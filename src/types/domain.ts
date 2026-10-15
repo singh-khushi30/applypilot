@@ -85,6 +85,19 @@ export type Analysis = {
   trace: TraceEvent[];
 };
 
+export const applicationStatuses = [
+  "analyzing",
+  "ready",
+  "outreach",
+  "applied",
+  "interview",
+  "offer",
+  "rejected",
+  "archived",
+] as const;
+
+export type ApplicationStatus = (typeof applicationStatuses)[number];
+
 export type ApplicationStage = "saved" | "ready" | "applied" | "interview";
 
 export type Application = {

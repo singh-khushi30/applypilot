@@ -61,7 +61,9 @@ The result's Agent run section shows the trace recorded by the graph as it ran: 
 
 Server logs are structured JSON with only the event, node, status, attempt, duration, error code, and evaluator issue codes. They never include the resume, the job description, prompts, model output, or the API key.
 
-Job URL extraction, OCR, contact scraping, Supabase, and authentication are not built yet. `/app/analysis/demo` is a separate sample screen and is never used as a fallback for a failed analysis.
+Job URL extraction, OCR, contact scraping, and authentication are not built yet. `/app/analysis/demo` is a separate sample screen and is never used as a fallback for a failed analysis.
+
+A successful analysis is then stored as an application plus an analysis row. The browser opens `/app/analysis/[id]`. If Supabase is not configured, or the save fails, the API still returns the finished analysis and does not call Gemini again. The screen says it was not saved and keeps a copy in this browser session only.
 
 ## Outreach flow
 
@@ -86,10 +88,40 @@ Edit / Approve / Reject
 - The draft may use only the strengths and role lines already on the analysis. Gemini does not score the person and does not see the raw resume.
 - Schema-invalid or ungrounded output is retried once. The second prompt lists failing paths and codes only.
 - The outreach graph pauses with LangGraph `interrupt` before any approval node. Tests resume that pause with a `MemorySaver`. The API creates that saver for a single generation request and then drops it.
-- Edit, approve, and reject in the product are explicit transitions in `src/lib/outreach/review.ts`, stored in this browser session. A draft cannot become approved without Approve. Regenerating returns it to awaiting review.
-- Durable cross-request resume of a paused graph needs a persistent checkpointer. That is not built. Restarting the server drops in-memory checkpoints. The session store is the review record until Supabase exists.
+- Edit, approve, and reject are explicit transitions in `src/lib/outreach/review.ts`. A draft cannot become approved without Approve. Regenerating returns it to awaiting review.
+- When Supabase is configured, the draft and its review state are stored with the application. Refreshing reloads that state. The LangGraph checkpoint is still request-local; the database record is the review source of truth.
+- Manual contacts are saved on the application. Example contacts stay fictional until you draft outreach, and that saved row keeps `source = demo`.
 
 ApplyPilot does not automatically send outreach. Human approval is required, and approval still does not send the message.
+
+## Persistence
+
+```text
+Job description + resume
+        ↓
+Analysis agent
+        ↓
+Application + analysis rows
+        ↓
+Outreach agent
+        ↓
+Contact + outreach draft rows
+```
+
+Supabase stores the application index (company, role, status, score), the structured analysis (summary, breakdown, alignments, gaps, recommendation, safe trace), contacts, and outreach drafts with their review status and `human_edited` flag.
+
+It does not store the resume PDF, resume text, job description, prompts, chain-of-thought, raw model responses, or API keys.
+
+Database access stays on the server. The browser never receives the Supabase secret key. Row level security is enabled and there are no policies for the public keys, so those keys cannot read or write the tables. The server uses `SUPABASE_SECRET_KEY`, which bypasses RLS. That is a single shared workspace until authentication exists. It is not a production multi-user boundary. `user_id` is on `applications` so ownership policies can be added later.
+
+Environment variables:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` or `NEXT_PUBLIC_SUPABASE_ANON_KEY` (browser key, unused for data access today)
+- `SUPABASE_SECRET_KEY` (server only; required for persistence)
+- `GEMINI_API_KEY` (server only)
+
+Missing Supabase configuration does not break the landing page. Persistence routes explain that the variables are required. The SQL migration is `supabase/migrations/20261014170000_initial_schema.sql`.
 
 ## Tech stack
 

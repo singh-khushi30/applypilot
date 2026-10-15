@@ -3,7 +3,7 @@
 import { AnalysisView } from "@/components/analysis/AnalysisView";
 import { PrimaryLink } from "@/components/landing/links";
 import { Skeleton } from "@/components/ui/skeleton";
-import { parseStoredAnalysis, readAnalysisSnapshot } from "@/lib/analysis/session";
+import { parseSessionAnalysis, readAnalysisSnapshot } from "@/lib/analysis/session";
 import { useSyncExternalStore } from "react";
 
 const PENDING = "\0pending";
@@ -42,7 +42,16 @@ export function AnalysisResult() {
 
   if (raw === PENDING) return <AnalysisPending />;
 
-  const analysis = parseStoredAnalysis(raw);
-  if (!analysis) return <AnalysisMissing />;
-  return <AnalysisView analysis={analysis} />;
+  const record = parseSessionAnalysis(raw);
+  if (!record) return <AnalysisMissing />;
+  return (
+    <div className="space-y-6">
+      {record.unsaved ? (
+        <p className="rounded-2xl border border-border bg-blush/70 px-4 py-3 text-sm leading-6">
+          This analysis is only in this browser session. It was not saved.
+        </p>
+      ) : null}
+      <AnalysisView analysis={record.analysis} />
+    </div>
+  );
 }

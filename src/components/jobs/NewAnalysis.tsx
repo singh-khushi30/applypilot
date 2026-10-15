@@ -7,7 +7,9 @@ import { ReviewStep } from "@/components/jobs/ReviewStep";
 import { Button } from "@/components/ui/button";
 import { analysisMessages } from "@/lib/analysis/messages";
 import { saveAnalysis } from "@/lib/analysis/session";
+import { persistenceMessages } from "@/lib/supabase/config";
 import { storedAnalysisSchema } from "@/lib/analysis/stored-analysis";
+import Link from "next/link";
 import { cn } from "@/lib/utils";
 import type { Job, JobSource, Resume } from "@/types/domain";
 import { AnimatePresence, motion, useReducedMotion } from "motion/react";
@@ -76,6 +78,7 @@ export function NewAnalysis() {
   const [resume, setResume] = useState<Resume | null>(null);
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [unsavedResult, setUnsavedResult] = useState(false);
 
   const job = jobFromForm(source, url, description, company, title);
 
@@ -143,13 +146,33 @@ export function NewAnalysis() {
           ? (payload as { analysis: unknown }).analysis
           : null,
       );
-      if (!analysis.success) {
+      const persisted =
+        payload &&
+        typeof payload === "object" &&
+        "persisted" in payload &&
+        (payload as { persisted?: unknown }).persisted === true;
+      if (!response.ok) {
+        if (analysis.success && persisted === false) {
+          saveAnalysis(analysis.data, true);
+          setUnsavedResult(true);
+          setError(readApiError(payload).message || persistenceMessages.saveFailed);
+          setPhase("form");
+          return;
+        }
+        const failure = readApiError(payload);
+        setError(failure.message);
+        setStep(stepForError(failure.code));
+        setPhase("form");
+        return;
+      }
+      if (!analysis.success || !persisted) {
         setError(analysisMessages.generic);
         setPhase("form");
         return;
       }
-      saveAnalysis(analysis.data);
-      router.push("/app/analysis/result");
+      setUnsavedResult(false);
+      router.push(`/app/analysis/${analysis.data.id}`);
+      return;
     } catch {
       setError(analysisMessages.generic);
       setPhase("form");
@@ -245,9 +268,14 @@ export function NewAnalysis() {
       </div>
 
       {error && step === 3 ? (
-        <p className="mt-6 text-sm text-destructive" role="alert">
-          {error}
-        </p>
+        <div className="mt-6 space-y-3" role="alert">
+          <p className="text-sm text-destructive">{error}</p>
+          {unsavedResult ? (
+            <Link href="/app/analysis/result" className="text-sm font-medium text-violet">
+              View the unsaved result in this session
+            </Link>
+          ) : null}
+        </div>
       ) : null}
 
       <div className="mt-8 flex flex-wrap items-center gap-3">

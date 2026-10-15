@@ -1,4 +1,6 @@
 import { analyzeJobFit } from "@/lib/ai/analyze-job";
+import { saveCompletedAnalysis } from "@/lib/persistence/save-analysis";
+import { saveAnalysisBundle } from "@/lib/supabase/repositories/analyses";
 import {
   AnalysisInputError,
   AnalysisQualityError,
@@ -77,7 +79,19 @@ export async function POST(request: Request) {
       roleTitle: optionalText(form.get("title")),
     });
 
-    return Response.json({ analysis });
+    const saved = await saveCompletedAnalysis(analysis, saveAnalysisBundle);
+    if (!saved.persisted) {
+      return Response.json(
+        {
+          analysis: saved.analysis,
+          persisted: false,
+          error: { code: saved.error.code, message: saved.error.message },
+        },
+        { status: 503 },
+      );
+    }
+
+    return Response.json({ analysis: saved.analysis, persisted: true });
   } catch (error) {
     if (error instanceof AnalysisInputError || error instanceof ResumeExtractionError) {
       const status = error instanceof ResumeExtractionError ? 422 : 400;

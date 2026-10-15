@@ -168,7 +168,7 @@ export function AnalysisView({ analysis }: { analysis: Analysis }) {
             </Button>
           ) : (
             <Link
-              href="/app/contacts"
+              href={`/app/contacts?application=${encodeURIComponent(analysis.id)}`}
               className={buttonVariants({
                 variant: "outline",
                 className: "h-11 rounded-full bg-cream px-5",

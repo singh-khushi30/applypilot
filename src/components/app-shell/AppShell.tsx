@@ -5,7 +5,27 @@ import { cn } from "@/lib/utils";
 import { Menu, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState, type ReactNode } from "react";
+import { Suspense, useEffect, useState, type ReactNode } from "react";
+
+function NavLinksFallback() {
+  return (
+    <nav aria-label="Workspace" className="flex flex-col gap-1">
+      {appNav.map((item) => {
+        const Icon = item.icon;
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            className="flex items-center gap-3 rounded-2xl px-3 py-2.5 text-sm text-foreground/80"
+          >
+            <Icon className="size-4" aria-hidden="true" />
+            {item.label}
+          </Link>
+        );
+      })}
+    </nav>
+  );
+}
 
 function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
   const pathname = usePathname();
@@ -72,7 +92,9 @@ export function AppShell({ children }: { children: ReactNode }) {
         >
           ApplyPilot
         </Link>
-        <NavLinks />
+        <Suspense fallback={<NavLinksFallback />}>
+          <NavLinks />
+        </Suspense>
         <div className="mt-auto">
           <WorkspaceMark />
         </div>
@@ -124,7 +146,9 @@ export function AppShell({ children }: { children: ReactNode }) {
               <span className="sr-only">Close menu</span>
             </button>
           </div>
-          <NavLinks onNavigate={() => setOpen(false)} />
+          <Suspense fallback={<NavLinksFallback />}>
+            <NavLinks onNavigate={() => setOpen(false)} />
+          </Suspense>
           <div className="mt-auto">
             <WorkspaceMark />
           </div>
